@@ -1,11 +1,10 @@
 done: basic problem
 
-structure:
-
-./src
-
-	main.c
-
-Wifi_server.py		w/ dynamic plot
+#### structure:
+'''
+src
+/---main.c
+Wifi_server.py
+'''
 
 
