@@ -3,9 +3,10 @@ done: basic problem
 ### structure:
 ```
 src
-/---main.c
+|---main.c
 Wifi_server.py
 ```
+
 
 
 
