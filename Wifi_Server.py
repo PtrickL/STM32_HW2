@@ -48,17 +48,20 @@ while True:
 
     for line in data.decode(errors="ignore").splitlines():
         try:
-            t, x, y, z = line.split(",")
+            t, f, x, y, z = line.split(",")
             t = int(t)
+            f = int(f)
             x, y, z = float(x), float(y), float(z)
 
-            # append to sliding window
+            if f==1:
+                print(f"[{t/1000.0:.3f}s] Significant motion detected!")
+
+
             time_vals.append(t/1000.0)
             x_vals.append(x)
             y_vals.append(y)
             z_vals.append(z-1024)
 
-            # update line data
             line_x.set_data(time_vals, x_vals)
             line_y.set_data(time_vals, y_vals)
             line_z.set_data(time_vals, z_vals)
