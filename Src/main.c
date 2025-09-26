@@ -7,8 +7,8 @@
 
 
 /* Update SSID and PASSWORD with own Access point settings */
-#define SSID     "Home"
-#define PASSWORD ""
+#define SSID     "esys305"
+#define PASSWORD "305305abcd"
 
 uint8_t RemoteIP[] = {192,168,50,210};
 #define RemotePORT	8002
@@ -47,7 +47,8 @@ static uint8_t RxData [500];
 #endif /* TERMINAL_USE */
 
 static void SystemClock_Config(void);
-
+void LSM6DSL_Enable_SignificantMotion(void);
+static void GPIO_Init(void);
 
 
 extern  SPI_HandleTypeDef hspi;
@@ -59,6 +60,8 @@ extern  SPI_HandleTypeDef hspi;
   * @param  None
   * @retval None
   */
+bool flag = false;
+
 int main(void){
 	uint8_t  MAC_Addr[6] = {0};
 	uint8_t  IP_Addr[4] = {0};
@@ -73,10 +76,13 @@ int main(void){
 	HAL_Init();
 
 	BSP_ACCELERO_Init();
+	LSM6DSL_Enable_SignificantMotion();
 	/* Configure the system clock */
 	SystemClock_Config();
 	/* Configure LED2 */
 	BSP_LED_Init(LED2);
+
+	GPIO_Init();
 
 #if defined (TERMINAL_USE)
 	/* Initialize all configured peripherals */
@@ -169,6 +175,9 @@ int main(void){
 	uint32_t lastTick = HAL_GetTick();
 
 	while(1){
+		//if(SENSOR_IO_Read(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_FUNC_SRC) & 0b01000000)	BSP_LED_On(LED2);
+		//else	BSP_LED_Off(LED2);
+
 		if(Socket != -1){
 			ret = WIFI_ReceiveData(Socket, RxData, sizeof(RxData)-1, &Datalen, 10);
 			if (ret == WIFI_STATUS_OK && Datalen > 0){
@@ -181,18 +190,19 @@ int main(void){
 				BSP_ACCELERO_AccGetXYZ(pDataXYZ);
 
 				int32_t t_ms = (int32_t)HAL_GetTick();
-				int len = snprintf(sendbuf, sizeof(sendbuf), "%"PRId32",%.3f,%.3f,%.3f\n",
-	                           t_ms,
+				int len = snprintf(sendbuf, sizeof(sendbuf), "%"PRId32",%d,%.3f,%.3f,%.3f\n",
+	                           t_ms, flag,
 	                           (float)pDataXYZ[0],
 	                           (float)pDataXYZ[1],
 	                           (float)pDataXYZ[2]);
 				tosend = (uint16_t)len;
 				ret = WIFI_SendData(Socket, (uint8_t*)sendbuf, tosend, &Datalen, WIFI_WRITE_TIMEOUT);
-
 				if (ret != WIFI_STATUS_OK){
 					TERMOUT("> ERROR : Failed to Send Data, connection closed\n");
 					break;
 				}
+				flag = 0;
+				BSP_LED_Off(LED2);
 			}
 		}
 		HAL_Delay(1);
@@ -252,6 +262,58 @@ static void SystemClock_Config(void){
 	}
 }
 
+static void GPIO_Init(void)
+{
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	/* USER CODE BEGIN MX_GPIO_Init_1 */
+
+	/* USER CODE END MX_GPIO_Init_1 */
+
+	/* GPIO Ports Clock Enable */
+	__HAL_RCC_GPIOD_CLK_ENABLE();
+
+	/*Configure GPIO pin Output Level */
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+
+	GPIO_InitStruct.Pin = GPIO_PIN_11;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+	/* EXTI interrupt init*/
+	HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+	/* USER CODE END MX_GPIO_Init_2 */
+}
+
+
+void LSM6DSL_Enable_SignificantMotion(void)
+{
+    uint8_t ctrl = 0x00;
+
+    ctrl = 0x80;
+    SENSOR_IO_Write(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_FUNC_CFG_ACCESS, ctrl);
+
+    ctrl = 0x02;
+    SENSOR_IO_Write(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_SM_STEP_THS, ctrl);
+
+    ctrl = 0x00;
+    SENSOR_IO_Write(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_FUNC_CFG_ACCESS, ctrl);
+
+    ctrl = 0x20;
+    SENSOR_IO_Write(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_CTRL1_XL, ctrl);
+
+    ctrl = SENSOR_IO_Read(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_CTRL10_C);
+    ctrl |= 0x05;
+    SENSOR_IO_Write(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_CTRL10_C, ctrl);
+
+    ctrl = SENSOR_IO_Read(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_INT1_CTRL);
+    ctrl |= 0x40;
+    SENSOR_IO_Write(LSM6DSL_ACC_GYRO_I2C_ADDRESS_LOW, LSM6DSL_ACC_GYRO_INT1_CTRL, ctrl);
+}
+
+
 #if defined (TERMINAL_USE)
 /**
 	* @brief  Retargets the C library TERMOUT function to the USART.
@@ -296,7 +358,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	case (GPIO_PIN_1):
 		SPI_WIFI_ISR();
 		break;
-
+	case (GPIO_PIN_11):
+		flag = 1;
+		BSP_LED_On(LED2);
+		break;
 
     default:
       break;
